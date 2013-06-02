@@ -14,12 +14,18 @@ Provides:
   - redis
 Scaling:
   Min: 1
-  Max: 1
+  Max: -1
 Endpoints:
   - Private-IP-Name:   DB_HOST
     Private-Port-Name: DB_PORT
     Private-Port:      16379
     Public-Port-Name:  DB_PROXY_PORT
+Subscribes:
+  set-redis-connection-info:
+    Type: "ENV:NET_TCP:db:redis:connection-info"
+    Required: false
 Publishes:
   publish-db-connection-info:
     Type: "ENV:NET_TCP:db:connection-info"
+  publish-redis-connection-info:
+    Type: "ENV:NET_TCP:db:redis:connection-info"
