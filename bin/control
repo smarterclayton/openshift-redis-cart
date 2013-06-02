@@ -6,6 +6,7 @@ PID=pid/redis.pid
 if [ -n $REDIS_PASSWORD ]; then
     CLI_AUTH="-a $REDIS_PASSWORD"
 fi
+REDIS_CLI="-h $OPENSHIFT_REDIS_DB_HOST -p $OPENSHIFT_REDIS_DB_PORT $CLI_AUTH"
 
 function is_running() {
     if [ -f $PID ]; then
@@ -24,10 +25,12 @@ function status() {
 
 function start() {
     if (is_running); then
-        exit 0;
+        exit 0
     fi
 
+    echo $REDIS_CLI > env/REDIS_CLI
     erb conf/redis.conf.erb | redis-server -
+
     ret=$?
     if [ $ret -ne 0 ]; then
         echo "Redis failed to start - $ret" 1>&2
@@ -37,7 +40,7 @@ function start() {
 
 function stop() {
     if (is_running); then
-        redis-cli $CLI_AUTH SHUTDOWN
+        redis-cli $REDIS_CLI SHUTDOWN
         if [ $? -eq 0 ]; then
             exit 0
         fi
