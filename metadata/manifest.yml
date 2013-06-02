@@ -1,0 +1,24 @@
+Name: redis
+Cartridge-Short-Name: REDIS
+Display-Name: Redis
+Version: "2.6"
+Website: https://github.com/smarterclayton/openshift-redis-cart
+Cartridge-Version: 0.0.1
+Cartridge-Vendor: smarterclayton
+Categories:
+  - service
+  - database
+Provides:
+  - redis-2.6
+  - redis
+Scaling:
+  Min: 1
+  Max: 1
+Endpoints:
+  - Private-IP-Name:   DB_HOST
+    Private-Port-Name: DB_PORT
+    Private-Port:      6379
+    Public-Port-Name:  DB_PROXY_PORT
+Publishes:
+  publish-db-connection-info:
+    Type: "ENV:NET_TCP:db:connection-info"
