@@ -8,7 +8,6 @@ Cartridge-Vendor: smarterclayton
 Categories:
   - service
   - database
-  - embedded
 Provides:
   - redis-2.6
   - redis
