@@ -4,7 +4,7 @@ STOPTIMEOUT=10
 FMT="%a %b %d %Y %H:%M:%S GMT%z (%Z)"
 PID=pid/redis.pid
 if [ -n $REDIS_PASSWORD ]; then
-    CLI_AUTH=-a $REDIS_PASSWORD
+    CLI_AUTH="-a $REDIS_PASSWORD"
 fi
 
 function is_running() {
