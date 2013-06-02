@@ -3,10 +3,9 @@
 STOPTIMEOUT=10
 FMT="%a %b %d %Y %H:%M:%S GMT%z (%Z)"
 PID=pid/redis.pid
-if [ -n $REDIS_PASSWORD ]
+if [ -n $REDIS_PASSWORD ]; then
     CLI_AUTH=-a $REDIS_PASSWORD
-end
-
+fi
 
 function is_running() {
     if [ -f $PID ]; then
@@ -22,7 +21,6 @@ function status() {
         client_result "Redis is not running"
     fi
 }
-
 
 function start() {
     if (is_running); then
@@ -68,6 +66,7 @@ function pre-build() {
 }
 
 function tidy() {
+    echo
 }
 
 #
@@ -95,4 +94,3 @@ case "$1" in
     tidy)                tidy        ;;
     *) exit 0;
 esac
-
