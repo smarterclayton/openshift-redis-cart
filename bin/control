@@ -37,7 +37,7 @@ function start() {
         exit $ret
     fi
 
-    if [ -n $REDIS_SENTINEL ]; then
+    if [ -n "$REDIS_SENTINEL" ]; then
         erb conf/redis-sentinel.conf.erb | redis-server --sentinel -
         ret=$?
         if [ $ret -ne 0 ]; then

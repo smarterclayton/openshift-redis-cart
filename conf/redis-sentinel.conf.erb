@@ -1,5 +1,7 @@
 # Example sentinel.conf
 
+pidfile <%= ENV['OPENSHIFT_REDIS_DIR'] %>/pid/redis-sentinel.pid
+daemonize yes
 logfile <%= ENV['OPENSHIFT_REDIS_DIR'] %>/logs/redis.log
 bind <%= ENV['OPENSHIFT_REDIS_SENTINEL_HOST'] %>
 
