@@ -51,12 +51,18 @@ tokens = tokenize(ARGV.shift)
 
 # better if this is in creation order (oldest first)
 gears = gear_info(tokens, gear_id) do |d| 
-  d.split(/;? /).map{ |s| s.split('=', 2) }.inject({}){ |h, (k,v)| h[k] = v if v != ';'; h }
+  d.split(' ').map{ |s| s.scan(/\A(.+?)=(.*?);?\Z/).first }.inject({}){ |h, (k,v)| h[k] = v if v != ''; h }
 end
 gears.each_pair{ |k,v| puts "Found gear #{k}#{k == gear_id ? '* ' : ''} with data #{v.inspect}" }
+gear_ids = gears.keys.sort.uniq
 
-master = ENV['REDIS_PREFERRED_MASTER'] || gears.keys.sort.first
-IO.write('env/REDIS_PREFERRED_MASTER', master)
-IO.write('env/REDIS_PASSWORD', gears[master]['OPENSHIFT_REDIS_DB_PASSWORD'] || ENV['REDIS_PASSWORD'])
-hosts = gears.map{ |k,v| v['OPENSHIFT_REDIS_DB_HOST'] }.compact.uniq.sort
-IO.write('env/REDIS_KNOWN_HOSTS', hosts.join(','))
+master = (ENV['REDIS_CLUSTER_MASTER'] if gear_ids.include?(ENV['REDIS_CLUSTER_MASTER'])) || gear_ids.first
+hosts = gears.map{ |k,v| "#{v['OPENSHIFT_REDIS_DB_HOST']}:#{v['OPENSHIFT_REDIS_DB_PORT']}" }.compact.uniq.sort
+members = gears.map{ |k,v| "#{k}=#{v['OPENSHIFT_REDIS_DB_HOST']}:#{v['OPENSHIFT_REDIS_DB_PORT']}" }.compact.uniq.sort
+
+# gears use the password of the preferred master in a scaled config
+File.open('env/REDIS_PASSWORD', 'w'){ |f| f.puts gears[master]['OPENSHIFT_REDIS_DB_PASSWORD'] || ENV['REDIS_PASSWORD'] }
+File.open('env/REDIS_CLUSTER_MASTER', 'w'){ |f| f.puts master }
+File.open('env/REDIS_CLUSTER_MEMBERS', 'w'){ |f| f.puts members.join("\n") }
+File.open('env/REDIS_CLUSTER', 'w'){ |f| f.puts hosts.join(",") }
+
