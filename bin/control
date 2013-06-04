@@ -36,6 +36,15 @@ function start() {
         echo "Redis failed to start - $ret" 1>&2
         exit $ret
     fi
+
+    if [ -n $REDIS_SENTINEL ]; then
+        erb conf/redis-sentinel.conf.rb | redis-server -
+        ret=$?
+        if [ $ret -ne 0 ]; then
+            echo "Redis Sentinel failed to start - $ret" 1>&2
+            exit $ret
+        fi
+    fi
 }
 
 function stop() {
