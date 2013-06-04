@@ -38,7 +38,7 @@ function start() {
     fi
 
     if [ -n "$REDIS_SENTINEL" ]; then
-        erb conf/redis-sentinel.conf.erb | redis-server --sentinel -
+        erb conf/redis-sentinel.conf.erb | redis-server - --sentinel
         ret=$?
         if [ $ret -ne 0 ]; then
             echo "Redis Sentinel failed to start - $ret" 1>&2
