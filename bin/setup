@@ -6,5 +6,5 @@ for dir in logs tmp pid cache dbs env; do
 	mkdir -p $dir
 done
 
-echo $(pwd)/versions/2.6/bin > env/OPENSHIFT_RUBY_PATH_ELEMENT
+echo $(pwd)/versions/2.6/bin > env/OPENSHIFT_REDIS_PATH_ELEMENT
 cat /dev/urandom | head -c${1:-32} | sha256sum | base64 | head -c 30 > env/REDIS_PASSWORD
