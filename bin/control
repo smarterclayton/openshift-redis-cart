@@ -2,59 +2,106 @@
 
 STOPTIMEOUT=10
 FMT="%a %b %d %Y %H:%M:%S GMT%z (%Z)"
-PID=pid/redis.pid
+pid=pid/redis.pid
+sentinel_pid=pid/redis.pid
 if [ -n $REDIS_PASSWORD ]; then
     CLI_AUTH="-a $REDIS_PASSWORD"
 fi
-REDIS_CLI="-h $OPENSHIFT_REDIS_DB_HOST -p $OPENSHIFT_REDIS_DB_PORT $CLI_AUTH"
-
-function is_running() {
-    if [ -f $PID ]; then
-        return 0
-    fi
-    return 1
-}
+REDIS_CLI="-h $OPENSHIFT_REDIS_HOST -p $OPENSHIFT_REDIS_PORT $CLI_AUTH"
+REDIS_SENTINEL_CLI="-h $OPENSHIFT_REDIS_SENTINEL_HOST -p $OPENSHIFT_REDIS_SENTINEL_PORT $CLI_AUTH"
 
 function status() {
-    if [ is_running ]; then
+    if [ -f $pid ]; then
         client_result "Redis is running"
     else
         client_result "Redis is not running"
     fi
+    if [ -f $sentinel_pid ]; then
+        client_result "Redis Sentinel is running"
+    else
+        client_result "Redis Sentinel is not running"
+    fi
+}
+
+function use-source() {
+    if ! [ $# -gt 0 ]; then
+        echo "Usage: $0 git-repository-url [commit]"
+        exit 1
+    fi
+    set -e
+    mkdir -p $TMP/_env/
+    rm -rf $TMP/_env/*
+    cp env/* $TMP/_env/
+    rm -rf .??* *
+    if [ -n "$2" ]; then
+        echo "Switching to using source from $1, commit $2"
+        git clone $1 -b $2 .
+    else
+        echo "Switching to using source from $1"
+        git clone $1 .
+    fi
+    mkdir -p env
+    cp $TMP/_env/* env/
+    
+    bin/setup
 }
 
 function start() {
-    if (is_running); then
-        exit 0
-    fi
+    if ! [ -f $pid ]; then
+        echo $REDIS_CLI > env/REDIS_CLI
+        erb conf/redis.conf.erb | redis-server -
 
-    echo $REDIS_CLI > env/REDIS_CLI
-    erb conf/redis.conf.erb | redis-server -
-
-    ret=$?
-    if [ $ret -ne 0 ]; then
-        echo "Redis failed to start - $ret" 1>&2
-        exit $ret
-    fi
-
-    if [ -n "$REDIS_SENTINEL" ]; then
-        erb conf/redis-sentinel.conf.erb | redis-server - --sentinel
         ret=$?
         if [ $ret -ne 0 ]; then
-            echo "Redis Sentinel failed to start - $ret" 1>&2
+            echo "Redis failed to start - $ret" 1>&2
             exit $ret
+        fi
+    fi
+
+    if [ "$REDIS_SENTINEL" == "1" ]; then
+        if ! [ -f $sentinel_pid ]; then
+            echo $REDIS_SENTINEL_CLI > env/REDIS_SENTINEL_CLI
+            erb conf/redis-sentinel.conf.erb | redis-server - --sentinel
+            ret=$?
+            if [ $ret -ne 0 ]; then
+                echo "Redis Sentinel failed to start - $ret" 1>&2
+                exit $ret
+            fi
         fi
     fi
 }
 
 function stop() {
-    if (is_running); then
+    m=0
+    s=0
+
+    if [ -f $pid ]; then
         redis-cli $REDIS_CLI SHUTDOWN
-        if [ $? -eq 0 ]; then
-            exit 0
-        fi
-        exit 1
+        m=$?
     fi
+
+    if [ -f $sentinel_pid ]; then
+        redis-cli $REDIS_SENTINEL_CLI SHUTDOWN
+        s=$?
+    fi
+
+    if [ $m -eq 0 ] && [ $s -eq 0 ]; then
+        exit 0
+    fi
+
+    if [ -f $pid ]; then
+        kill -s SIGTERM $(cat $pid)
+        rm $pid
+    fi
+
+    if [ -f $sentinel_pid ]; then
+        kill -s SIGTERM $(cat $sentinel_pid)
+        rm $sentinel_pid
+    fi        
+
+    pkill -9 redis-server
+
+    exit 1
 }
 
 function restart() {
@@ -86,8 +133,8 @@ function tidy() {
 #
 
 # Ensure arguments.
-if ! [ $# -eq 1 ]; then
-    echo "Usage: $0 [start|restart|graceful|graceful-stop|stop|status]"
+if ! [ $# -gt 0 ]; then
+    echo "Usage: $0 [start|restart|graceful|graceful-stop|stop|status|use-source]"
     exit 1
 fi
 
@@ -104,5 +151,6 @@ case "$1" in
     pre-build)           pre-build   ;;
     post-deploy)         post-deploy ;;
     tidy)                tidy        ;;
+    use-source)          use-source  $2 $3 ;;
     *) exit 0;
 esac

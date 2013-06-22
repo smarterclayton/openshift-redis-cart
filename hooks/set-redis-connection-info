@@ -5,7 +5,6 @@ def gear_info(tokens, gear_id, &block)
   if tokens.length == 1
     gears[gear_id] = tokens.first
   else
-    puts tokens.inspect
     while not tokens.empty?
       gear, delim, data = tokens.shift(3)
       data = yield data if block_given?
@@ -56,13 +55,37 @@ end
 gears.each_pair{ |k,v| puts "Found gear #{k}#{k == gear_id ? '* ' : ''} with data #{v.inspect}" }
 gear_ids = gears.keys.sort.uniq
 
-master = (ENV['REDIS_CLUSTER_MASTER'] if gear_ids.include?(ENV['REDIS_CLUSTER_MASTER'])) || gear_ids.first
-hosts = gears.map{ |k,v| "#{v['OPENSHIFT_REDIS_DB_HOST']}:#{v['OPENSHIFT_REDIS_DB_PORT']}" }.compact.uniq.sort
-members = gears.map{ |k,v| "#{k}=#{v['OPENSHIFT_REDIS_DB_HOST']}:#{v['OPENSHIFT_REDIS_DB_PORT']}" }.compact.uniq.sort
+puts "-------"
 
-# gears use the password of the preferred master in a scaled config
-File.open('env/REDIS_PASSWORD', 'w'){ |f| f.puts gears[master]['OPENSHIFT_REDIS_DB_PASSWORD'] || ENV['REDIS_PASSWORD'] }
-File.open('env/REDIS_CLUSTER_MASTER', 'w'){ |f| f.puts master }
+was_master = ENV['OPENSHIFT_REDIS_DB_MASTER'] == '1'
+masters = gears.map{ |k,v| v['S_REDIS_DB_MASTER'] == '1' ? k : nil }.compact.uniq.sort
+
+mode = 
+  case ENV['OPENSHIFT_REDIS_DB_MODE']
+  when 'read_replica' 
+    if masters.length > 1
+      masters = masters[0,1]
+    elsif masters.length == 0
+      masters = gears.keys.uniq.sort[0,1]
+    end
+    puts "Running in read replica mode with master #{masters}"
+    :read_replica
+  else
+    masters = gears.keys.uniq.sort
+    puts "Running sharded with masters #{masters.inspect}"
+    :sharded
+  end
+
+# Use the password of the first master
+password = gears[masters.first]['S_REDIS_DB_PASSWORD'] || ENV['REDIS_PASSWORD']
+# An array of all of the host:port pairs for the cluster
+hosts = gears.map{ |k,v| "#{v['S_REDIS_DB_HOST']}:#{v['S_REDIS_DB_PORT']}" }.compact.uniq.sort
+# A list of key value pairs in <gear id> => <host:port pair> for the cluster
+members = gears.map{ |k,v| "#{k}=#{v['S_REDIS_DB_HOST']}:#{v['S_REDIS_DB_PORT']}" }.compact.uniq.sort
+
+File.delete('env/REDIS_CLI') rescue nil
+File.open('env/REDIS_PASSWORD', 'w'){ |f| f.puts password }
 File.open('env/REDIS_CLUSTER_MEMBERS', 'w'){ |f| f.puts members.join("\n") }
 File.open('env/REDIS_CLUSTER', 'w'){ |f| f.puts hosts.join(",") }
-
+File.open('env/REDIS_CLUSTER_MASTERS', 'w'){ |f| f.puts masters.join(",") }
+File.open('env/OPENSHIFT_REDIS_DB_MASTER', 'w'){ |f| f.puts masters.include?(gear_id) ? "1" : "0" }

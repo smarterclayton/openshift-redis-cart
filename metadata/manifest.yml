@@ -16,10 +16,10 @@ Scaling:
   Min: 1
   Max: -1
 Endpoints:
-  - Private-IP-Name:   DB_HOST
-    Private-Port-Name: DB_PORT
+  - Private-IP-Name:   HOST
+    Private-Port-Name: PORT
     Private-Port:      16379
-    Public-Port-Name:  DB_PROXY_PORT
+    Public-Port-Name:  PROXY_PORT
   - Private-IP-Name:   SENTINEL_HOST
     Private-Port-Name: SENTINEL_PORT
     Private-Port:      26379
