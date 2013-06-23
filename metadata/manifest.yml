@@ -3,7 +3,7 @@ Cartridge-Short-Name: REDIS
 Display-Name: Redis
 Version: "2.6"
 Website: https://github.com/smarterclayton/openshift-redis-cart
-Cartridge-Version: 0.0.1
+Cartridge-Version: 0.1.0
 Cartridge-Vendor: smarterclayton
 Categories:
   - service
@@ -14,12 +14,22 @@ Provides:
   - redis
 Scaling:
   Min: 1
-  Max: 1
+  Max: -1
 Endpoints:
-  - Private-IP-Name:   DB_HOST
-    Private-Port-Name: DB_PORT
+  - Private-IP-Name:   HOST
+    Private-Port-Name: PORT
     Private-Port:      16379
-    Public-Port-Name:  DB_PROXY_PORT
+    Public-Port-Name:  PROXY_PORT
+  - Private-IP-Name:   SENTINEL_HOST
+    Private-Port-Name: SENTINEL_PORT
+    Private-Port:      26379
+    Public-Port-Name:  SENTINEL_PROXY_PORT
+Subscribes:
+  set-redis-connection-info:
+    Type: "ENV:NET_TCP:db:redis:connection-info-v1"
+    Required: false
 Publishes:
   publish-db-connection-info:
     Type: "ENV:NET_TCP:db:connection-info"
+  publish-redis-connection-info:
+    Type: "ENV:NET_TCP:db:redis:connection-info-v1"

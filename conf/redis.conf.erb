@@ -22,12 +22,12 @@ pidfile <%= ENV['OPENSHIFT_REDIS_DIR'] %>/pid/redis.pid
 
 # Accept connections on the specified port, default is 6379.
 # If port 0 is specified Redis will not listen on a TCP socket.
-port <%= ENV['OPENSHIFT_REDIS_DB_PORT'] %>
+port <%= ENV['OPENSHIFT_REDIS_PORT'] %>
 
 # If you want you can bind a single interface, if the bind option is not
 # specified all the interfaces will listen for incoming connections.
 #
-bind <%= ENV['OPENSHIFT_REDIS_DB_HOST'] %>
+bind <%= ENV['OPENSHIFT_REDIS_HOST'] %>
 
 # Specify the path for the unix socket that will be used to listen for
 # incoming connections. There is no default, so Redis will not listen
@@ -150,10 +150,29 @@ dbfilename dump.rdb
 # The Append Only File will also be created inside this directory.
 # 
 # Note that you must specify a directory here, not a file name.
-dir <%= ENV['OPENSHIFT_REDIS_DIR'] %>/dbs/
+dir <%= ENV['OPENSHIFT_DATA_DIR'] %>/.redis/dbs/
 
 ################################# REPLICATION #################################
 
+<% 
+case ENV['REDIS_DB_MODE']
+when 'read_replica'
+  if ENV['REDIS_DB_MASTER'] != '1'
+    masters = ENV['REDIS_CLUSTER_MASTERS'].split(',')
+    master = ENV['REDIS_CLUSTER_MEMBERS'].each_line.to_a.map do |line|
+      gear, host = line.split('=',2)
+      if masters.include?(gear)
+        host
+      end
+    end.compact.first
+%>
+slaveof <%= master.split(':').join(' ') %>
+masterauth <%= ENV['REDIS_PASSWORD'] %>
+<%
+  end
+else
+end
+%>
 # Master-Slave replication. Use slaveof to make a Redis instance a copy of
 # another Redis server. Note that the configuration is local to the slave
 # so for example it is possible to configure the slave to save the DB with a
@@ -315,6 +334,10 @@ requirepass <%= ENV['REDIS_PASSWORD'] %>
 # output buffers (but this is not needed if the policy is 'noeviction').
 #
 # maxmemory <bytes>
+<% if !(ENV['REDIS_MAXMEMORY'] || "").empty? %>
+maxmemory <%= ENV['REDIS_MAXMEMORY'] %>
+<% end %>
+
 
 # MAXMEMORY POLICY: how Redis will select what to remove when maxmemory
 # is reached. You can select among five behaviors:
@@ -367,7 +390,7 @@ requirepass <%= ENV['REDIS_PASSWORD'] %>
 #
 # Please check http://redis.io/topics/persistence for more information.
 
-appendonly no
+appendonly <%= ENV['REDIS_APPENDONLY'] || 'no' %>
 
 # The name of the append only file (default: "appendonly.aof")
 # appendfilename appendonly.aof
@@ -396,7 +419,7 @@ appendonly no
 # If unsure, use "everysec".
 
 # appendfsync always
-appendfsync everysec
+appendfsync <%= ENV['REDIS_APPENDFSYNC'] || 'everysec' %>
 # appendfsync no
 
 # When the AOF fsync policy is set to always or everysec, and a background

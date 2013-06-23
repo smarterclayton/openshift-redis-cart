@@ -1,51 +1,119 @@
 #!/bin/bash
 
-STOPTIMEOUT=10
-FMT="%a %b %d %Y %H:%M:%S GMT%z (%Z)"
-PID=pid/redis.pid
+pid=pid/redis.pid
+sentinel_pid=pid/redis-sentinel.pid
+
 if [ -n $REDIS_PASSWORD ]; then
     CLI_AUTH="-a $REDIS_PASSWORD"
 fi
-REDIS_CLI="-h $OPENSHIFT_REDIS_DB_HOST -p $OPENSHIFT_REDIS_DB_PORT $CLI_AUTH"
-
-function is_running() {
-    if [ -f $PID ]; then
-        return 0
-    fi
-    return 1
-}
+REDIS_CLI="-h $OPENSHIFT_REDIS_HOST -p $OPENSHIFT_REDIS_PORT $CLI_AUTH"
+REDIS_SENTINEL_CLI="-h $OPENSHIFT_REDIS_SENTINEL_HOST -p $OPENSHIFT_REDIS_SENTINEL_PORT $CLI_AUTH"
 
 function status() {
-    if [ is_running ]; then
+    client_result $pwd
+    if [ -f $pid ] && ( kill -0 $(cat $pid) ); then
         client_result "Redis is running"
+        if [ "$REDIS_DB_MASTER" == "1" ]; then
+            client_result "  master (receives writes), mode ${REDIS_DB_MODE:-sharded}"
+        else
+            client_result "  slave"
+        fi
+        client_result "  Connect to: $OPENSHIFT_GEAR_DNS:$OPENSHIFT_REDIS_PROXY_PORT password: $REDIS_PASSWORD"
     else
         client_result "Redis is not running"
     fi
+
+    if [ -f $sentinel_pid ] && ( kill -0 $(cat $sentinel_pid) ); then
+        client_result "Redis Sentinel is running"
+        client_result "  Connect to: $OPENSHIFT_GEAR_DNS:$OPENSHIFT_REDIS_SENTINEL_PROXY_PORT password: $REDIS_PASSWORD"
+    else
+        client_result "Redis Sentinel is not running"
+    fi
+}
+
+function use-source() {
+    if ! [ $# -gt 0 ]; then
+        echo "Usage: $0 git-repository-url [commit]"
+        return 1
+    fi
+    set -e
+    stop
+    mkdir -p $TMP/_env/
+    rm -rf $TMP/_env/*
+    cp env/* $TMP/_env/
+    rm -rf .??* *
+    if [ -n $2 ]; then
+        echo "Switching to using source from $1, commit $2"
+        git clone $1 -b $2 .
+    else
+        echo "Switching to using source from $1"
+        git clone $1 .
+    fi
+    mkdir -p env
+    cp $TMP/_env/* env/
+    
+    bin/setup
+}
+
+function update() {
+    stop
+    ./.openshift/action_hooks/build
 }
 
 function start() {
-    if (is_running); then
-        exit 0
+    if ! [ -f $pid ]; then
+        echo $REDIS_CLI > env/REDIS_CLI
+        erb conf/redis.conf.erb | redis-server -
+
+        ret=$?
+        if [ $ret -ne 0 ]; then
+            echo "Redis failed to start - $ret" 1>&2
+            return $ret
+        fi
     fi
 
-    echo $REDIS_CLI > env/REDIS_CLI
-    erb conf/redis.conf.erb | redis-server -
-
-    ret=$?
-    if [ $ret -ne 0 ]; then
-        echo "Redis failed to start - $ret" 1>&2
-        exit $ret
+    if [ "$REDIS_SENTINEL" == "1" ]; then
+        if ! [ -f $sentinel_pid ]; then
+            echo $REDIS_SENTINEL_CLI > env/REDIS_SENTINEL_CLI
+            erb conf/redis-sentinel.conf.erb | redis-server - --sentinel
+            ret=$?
+            if [ $ret -ne 0 ]; then
+                echo "Redis Sentinel failed to start - $ret" 1>&2
+                return $ret
+            fi
+        fi
     fi
 }
 
 function stop() {
-    if (is_running); then
+    m=0
+    s=0
+
+    if [ -f $pid ]; then
         redis-cli $REDIS_CLI SHUTDOWN
-        if [ $? -eq 0 ]; then
-            exit 0
-        fi
-        exit 1
+        m=$?
     fi
+
+    if [ -f $sentinel_pid ]; then
+        redis-cli $REDIS_SENTINEL_CLI SHUTDOWN
+        s=$?
+    fi
+
+    if [ $m -eq 0 ] && [ $s -eq 0 ]; then
+        return 0
+    fi
+
+    if [ -f $pid ]; then
+        kill -s SIGTERM $(cat $pid)
+        rm $pid
+    fi
+
+    if [ -f $sentinel_pid ]; then
+        kill -s SIGTERM $(cat $sentinel_pid)
+        rm $sentinel_pid
+    fi        
+
+    return 1
 }
 
 function restart() {
@@ -77,8 +145,8 @@ function tidy() {
 #
 
 # Ensure arguments.
-if ! [ $# -eq 1 ]; then
-    echo "Usage: $0 [start|restart|graceful|graceful-stop|stop|status]"
+if ! [ $# -gt 0 ]; then
+    echo "Usage: $0 [start|restart|graceful|graceful-stop|stop|status|update|use-source]"
     exit 1
 fi
 
@@ -95,5 +163,7 @@ case "$1" in
     pre-build)           pre-build   ;;
     post-deploy)         post-deploy ;;
     tidy)                tidy        ;;
-    *) exit 0;
+    update)              update      ;;
+    use-source)          use-source  $2 $3 ;;
+    *)
 esac

@@ -1,0 +1,91 @@
+#!/usr/bin/ruby
+
+def gear_info(tokens, gear_id, &block)
+  gears = {}
+  if tokens.length == 1
+    gears[gear_id] = tokens.first
+  else
+    while not tokens.empty?
+      gear, delim, data = tokens.shift(3)
+      data = yield data if block_given?
+      raise "Invalid data" unless delim == '='
+      gears[gear] = data
+      tokens.shift if tokens.first == ' '
+    end
+  end
+  gears
+end
+
+def tokenize(s)
+  tokens = []
+  a = ""
+  state = :start
+  s.scan(/([ \t]+)|(\\')|(')|([^ \t']+)/) do |args|
+    space, escaped_delim, delim, text = args
+    case state
+    when :start
+      case
+      when space then " "
+      when escaped_delim then raise "Unexpected delimiter"
+      when delim then state = :within_delim
+      when text then tokens << text
+      else raise "error"
+      end
+    when :within_delim
+      case
+      when space then a << space
+      when escaped_delim then a << '"'
+      when delim then tokens << a; a = ""; state = :start
+      when text then a << text
+      end
+    end
+  end
+  tokens << a if a.length > 0
+  tokens
+end
+
+gear_id = ARGV.shift
+domain = ARGV.shift
+tokens = tokenize(ARGV.shift)
+
+# better if this is in creation order (oldest first)
+gears = gear_info(tokens, gear_id) do |d| 
+  d.split(' ').map{ |s| s.scan(/\A(.+?)=(.*?);?\Z/).first }.inject({}){ |h, (k,v)| h[k] = v if v != ''; h }
+end
+gears.each_pair{ |k,v| puts "Found gear #{k}#{k == gear_id ? '* ' : ''} with data #{v.inspect}" }
+gear_ids = gears.keys.sort.uniq
+
+puts "-------"
+
+was_master = ENV['REDIS_DB_MASTER'] == '1'
+masters = gears.map{ |k,v| v['S_REDIS_DB_MASTER'] == '1' ? k : nil }.compact.uniq.sort
+
+mode = 
+  case ENV['REDIS_DB_MODE']
+  when 'read_replica' 
+    if masters.length > 1
+      masters = masters[0,1]
+    elsif masters.length == 0
+      masters = gears.keys.uniq.sort[0,1]
+    end
+    puts "Running in read replica mode with master #{masters}"
+    :read_replica
+  else
+    masters = gears.keys.uniq.sort
+    puts "Running sharded with masters #{masters.inspect}"
+    :sharded
+  end
+
+# Use the password of the first master
+password = gears[masters.first]['S_REDIS_DB_PASSWORD'] || ENV['REDIS_PASSWORD']
+# An array of all of the host:port pairs for the cluster
+hosts = gears.map{ |k,v| "#{v['S_REDIS_DB_HOST']}:#{v['S_REDIS_DB_PORT']}" }.compact.uniq.sort
+# A list of key value pairs in <gear id> => <host:port pair> for the cluster
+members = gears.map{ |k,v| "#{k}=#{v['S_REDIS_DB_HOST']}:#{v['S_REDIS_DB_PORT']}" }.compact.uniq.sort
+
+File.delete('env/REDIS_CLI') rescue nil
+File.open('env/REDIS_PASSWORD', 'w'){ |f| f.puts password }
+File.open('env/REDIS_CLUSTER_MEMBERS', 'w'){ |f| f.puts members.join("\n") }
+File.open('env/REDIS_CLUSTER', 'w'){ |f| f.puts hosts.join(",") }
+File.open('env/REDIS_CLUSTER_MASTERS', 'w'){ |f| f.puts masters.join(",") }
+File.open('env/REDIS_DB_MASTER', 'w'){ |f| f.puts masters.include?(gear_id) ? "1" : "0" }
