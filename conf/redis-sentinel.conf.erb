@@ -10,7 +10,7 @@ bind <%= ENV['OPENSHIFT_REDIS_SENTINEL_HOST'] %>
 port <%= ENV['OPENSHIFT_REDIS_SENTINEL_PORT'] %>
 
 <% 
-case ENV['OPENSHIFT_REDIS_DB_MODE']
+case ENV['REDIS_DB_MODE']
 when 'read_replica'
   masters = ENV['REDIS_CLUSTER_MASTERS'].split(',')
   members = ENV['REDIS_CLUSTER_MEMBERS'].each_line.to_a

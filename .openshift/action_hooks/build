@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set +e
+rm -rf tmp/redis
+mkdir tmp
+set -e
+
+version=${REDIS_BRANCH:-2.6}
+binaries="../../versions/$version/bin"
+
+pushd tmp
+
+git clone https://github.com/antirez/redis -b $version
+
+cd redis
+make
+
+mkdir -p $binaries
+
+echo $(git rev-parse HEAD) > $binaries/.gitcommit
+for file in src/redis-cli src/redis-server; do
+  cp -f $file $binaries
+done
+
+popd
+rm -rf tmp/redis

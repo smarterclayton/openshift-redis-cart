@@ -57,11 +57,11 @@ gear_ids = gears.keys.sort.uniq
 
 puts "-------"
 
-was_master = ENV['OPENSHIFT_REDIS_DB_MASTER'] == '1'
+was_master = ENV['REDIS_DB_MASTER'] == '1'
 masters = gears.map{ |k,v| v['S_REDIS_DB_MASTER'] == '1' ? k : nil }.compact.uniq.sort
 
 mode = 
-  case ENV['OPENSHIFT_REDIS_DB_MODE']
+  case ENV['REDIS_DB_MODE']
   when 'read_replica' 
     if masters.length > 1
       masters = masters[0,1]
@@ -88,4 +88,4 @@ File.open('env/REDIS_PASSWORD', 'w'){ |f| f.puts password }
 File.open('env/REDIS_CLUSTER_MEMBERS', 'w'){ |f| f.puts members.join("\n") }
 File.open('env/REDIS_CLUSTER', 'w'){ |f| f.puts hosts.join(",") }
 File.open('env/REDIS_CLUSTER_MASTERS', 'w'){ |f| f.puts masters.join(",") }
-File.open('env/OPENSHIFT_REDIS_DB_MASTER', 'w'){ |f| f.puts masters.include?(gear_id) ? "1" : "0" }
+File.open('env/REDIS_DB_MASTER', 'w'){ |f| f.puts masters.include?(gear_id) ? "1" : "0" }

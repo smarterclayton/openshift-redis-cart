@@ -2,9 +2,21 @@
 
 set -u
 
-for dir in logs tmp pid cache dbs env; do
+source $OPENSHIFT_CARTRIDGE_SDK_BASH
+
+for dir in logs pid tmp env; do
 	mkdir -p $dir
 done
 
-echo $(pwd)/versions/2.6/bin > env/OPENSHIFT_RUBY_PATH_ELEMENT
-cat /dev/urandom | head -c${1:-32} | sha256sum | base64 | head -c 30 > env/REDIS_PASSWORD
+mkdir -p $OPENSHIFT_DATA_DIR/.redis/dbs
+
+echo $(pwd)/versions/2.6/bin > env/OPENSHIFT_REDIS_PATH_ELEMENT
+
+if ! [ ${REDIS_PASSWORD+x} ]; then
+  cat /dev/urandom | head -c${1:-32} | sha256sum | base64 | head -c 40 > env/REDIS_PASSWORD
+  client_result "Redis is now configured with a default password $(cat env/REDIS_PASSWORD)"
+fi
+
+client_result "You can configure various Redis scaling and persistence modes by setting"
+client_result "environment variables - consult the cartridge README for more info."
+
