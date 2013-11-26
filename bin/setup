@@ -4,13 +4,15 @@ set -u
 
 source $OPENSHIFT_CARTRIDGE_SDK_BASH
 
+version=${REDIS_BRANCH:-2.8}
+
 for dir in logs pid tmp env; do
 	mkdir -p $dir
 done
 
 mkdir -p $OPENSHIFT_DATA_DIR/.redis/dbs
 
-echo $(pwd)/versions/2.6/bin > env/OPENSHIFT_REDIS_PATH_ELEMENT
+echo $(pwd)/versions/$version/bin > env/OPENSHIFT_REDIS_PATH_ELEMENT
 
 if ! [ ${REDIS_PASSWORD+x} ]; then
   cat /dev/urandom | head -c${1:-32} | sha256sum | base64 | head -c 40 > env/REDIS_PASSWORD
